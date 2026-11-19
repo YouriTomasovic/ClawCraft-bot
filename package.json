@@ -1,0 +1,42 @@
+{
+  "name": "clawcraft-bot",
+  "version": "0.6.7",
+  "description": "Safe local Minecraft bot with high-level actions and bridge API for OpenClaw",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test --test-reporter spec tests/api.test.js tests/config.test.js tests/job-queue.test.js tests/validation.test.js",
+    "doctor": "node -e \"require('./src/config');console.log('✅ Config OK')\""
+  },
+  "keywords": [
+    "minecraft",
+    "mineflayer",
+    "openclaw",
+    "bot"
+  ],
+  "author": "Premananda",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.0",
+    "express": "^4.21.0",
+    "minecraft-data": "^3.78.0",
+    "mineflayer": "4.37.0",
+    "mineflayer-collectblock": "^1.6.0",
+    "mineflayer-pathfinder": "^2.4.5",
+    "mineflayer-pvp": "^1.3.2",
+    "mineflayer-tool": "^1.2.0",
+    "prismarine-item": "^1.18.0",
+    "uuid": "^14.0.0",
+    "vec3": "^0.1.10"
+  },
+  "overrides": {
+    "prismarine-auth": "3.1.1",
+    "@xboxreplay/xboxlive-auth": "5.1.0",
+    "uuid": "^14.0.0"
+  }
+}
