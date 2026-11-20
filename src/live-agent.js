@@ -97,9 +97,40 @@ function createLiveAgent(botOrGetter, options = {}) {
         'golden_apple', 'apple', 'carrot', 'baked_potato'].includes(it.name));
   }
 
-  function hasSword() {
+  function findWeapon() {
     bot = getBot();
-    return bot.inventory.items().some((it) => it.name.includes('sword'));
+    const items = bot.inventory.items();
+    // Prefer the best sword available, then axes as a fallback.
+    const rank = (n) => {
+      const order = ['netherite', 'diamond', 'iron', 'stone', 'golden', 'wooden'];
+      const i = order.findIndex((m) => n.startsWith(m));
+      return i === -1 ? order.length : i;
+    };
+    const swords = items.filter((it) => it.name.endsWith('_sword')).sort((a, b) => rank(a.name) - rank(b.name));
+    if (swords.length) return swords[0];
+    const axes = items.filter((it) => it.name.endsWith('_axe')).sort((a, b) => rank(a.name) - rank(b.name));
+    return axes[0] || null;
+  }
+
+  function holdingWeapon() {
+    bot = getBot();
+    const hand = bot.heldItem;
+    return !!(hand && (hand.name.endsWith('_sword') || hand.name.endsWith('_axe')));
+  }
+
+  async function ensureWeapon() {
+    if (holdingWeapon()) return true;
+    const weapon = findWeapon();
+    if (!weapon) return false;
+    try {
+      await bot.equip(weapon, 'hand');
+      pushEvent('equip', { item: weapon.name });
+      log(`[Live] drew ${weapon.name}`);
+      return true;
+    } catch (e) {
+      log(`[Live] equip failed: ${e.message}`);
+      return false;
+    }
   }
 
   function playerEntity() {
@@ -143,13 +174,19 @@ function createLiveAgent(botOrGetter, options = {}) {
     }
   }
 
-  function defendIfNeeded() {
+  async function defendIfNeeded() {
     bot = getBot();
     if (!state.reflexes.autoDefend) return false;
     if (bot.health <= state.reflexes.fleeHealth) return false;
-    if (!hasSword()) return false;
+
+    // Look for a threat first. Drawing the weapon for nothing would leave it
+    // holding a sword while trying to eat.
     const target = nearestHostile(state.reflexes.defendRadius);
     if (!target) return false;
+
+    // Draw the sword before engaging — fighting bare-handed is not a plan.
+    if (!(await ensureWeapon())) { _skip('no weapon'); return false; }
+
     if (bot.pvp && bot.pvp.target === target) return false;
     try {
       if (bot.pathfinder) bot.pathfinder.setGoal(null);
@@ -158,6 +195,7 @@ function createLiveAgent(botOrGetter, options = {}) {
       pushEvent('engage', {
         mob: target.name,
         distance: Math.round(target.position.distanceTo(bot.entity.position) * 10) / 10,
+        weapon: bot.heldItem ? bot.heldItem.name : null,
       });
       return true;
     } catch (_) {
@@ -166,7 +204,7 @@ function createLiveAgent(botOrGetter, options = {}) {
   }
 
   // ─── intent ─────────────────────────────────────────────────────────
-  function applyIntent() {
+  async function applyIntent() {
     bot = getBot();
     if (!state.intent) return;
     const i = state.intent;
@@ -189,6 +227,7 @@ function createLiveAgent(botOrGetter, options = {}) {
         return;
       }
       if (bot.pvp && bot.pvp.target !== target) {
+        await ensureWeapon().catch(() => {});
         bot.pvp.attack(target);
         if (!state.intent._announced) {
           pushEvent('attack_start', { target: target.username || target.name });
@@ -224,8 +263,8 @@ function createLiveAgent(botOrGetter, options = {}) {
     // Reflex order matters: survive, then fight, then do what you were told.
     if (fleeIfLow()) return;
     await eatIfNeeded();
-    if (defendIfNeeded()) return;
-    applyIntent();
+    if (await defendIfNeeded()) return;
+    await applyIntent();
   }
 
   function start() {
