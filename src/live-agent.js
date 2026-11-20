@@ -51,6 +51,16 @@ function createLiveAgent(bot, options = {}) {
   let _tickHandle = null;
   let _lastHealth = 20;
   let _playerName = null;
+  let _lastSkip = '';
+
+  // Record why a reflex declined to act. Only logs on change, so a 250ms
+  // loop does not spam the console.
+  function _skip(reason) {
+    if (reason !== _lastSkip) {
+      _lastSkip = reason;
+      log(`[Live] eat skipped: ${reason}`);
+    }
+  }
 
   // ─── events ─────────────────────────────────────────────────────────
   function pushEvent(type, data) {
@@ -92,13 +102,13 @@ function createLiveAgent(bot, options = {}) {
 
   // ─── reflexes ───────────────────────────────────────────────────────
   async function eatIfNeeded() {
-    if (!state.reflexes.autoEat) return;
-    if (bot.food > 17) return;
-    if (Date.now() - state.lastEatAt < 3000) return;
+    if (!state.reflexes.autoEat) { _skip('autoEat off'); return; }
+    if (bot.food > 17) { _skip(`food ${bot.food} > 17`); return; }
+    if (Date.now() - state.lastEatAt < 3000) { _skip('cooldown'); return; }
     const food = bot.inventory.items().find((it) =>
       ['cooked_beef', 'bread', 'cooked_porkchop', 'cooked_chicken',
         'golden_apple', 'apple', 'baked_potato'].includes(it.name));
-    if (!food) return;
+    if (!food) { _skip('no food item'); return; }
     try {
       await bot.equip(food, 'hand');
       await bot.consume();
@@ -260,6 +270,7 @@ function createLiveAgent(bot, options = {}) {
     setReflexes(params) {
       Object.assign(state.reflexes, params);
       pushEvent('reflexes', state.reflexes);
+      start();  // enabling reflexes must also wake the loop
       return { reflexes: state.reflexes };
     },
 
