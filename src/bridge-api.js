@@ -243,6 +243,20 @@ function createBridgeAPI({ config, botCore, jobQueue, actions }) {
     return { name: req.body.name, count: parsePositiveInt(req.body.count, 1), slot: parsePositiveInt(req.body.slot, 36) };
   }));
 
+  // ─── Gamemode ──────────────────────────────────────────────────────
+  reg('POST', '/actions/gamemode', 'world', '{ mode }', (req, res) => {
+    const mode = String(req.body.mode || '').toLowerCase();
+    if (!['survival', 'creative', 'adventure', 'spectator'].includes(mode)) {
+      return res.status(400).json({ ok: false, error: 'mode must be survival|creative|adventure|spectator' });
+    }
+    const b = botCore.bot;
+    if (!b) return res.status(503).json({ ok: false, error: 'Bot not connected' });
+    b.chat(`/gamemode ${mode}`);
+    setTimeout(() => {
+      res.json({ ok: true, data: { mode, current: b.game?.gameMode } });
+    }, 600);
+  }, true);
+
   // ─── Live agent: persistent intent + reflexes + events ──────────────
   reg('POST', '/live/intent', 'live', '{ type, x?, y?, z?, name?, player? }', (req, res) => {
     try {
