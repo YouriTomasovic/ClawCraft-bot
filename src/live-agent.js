@@ -30,7 +30,11 @@ const HOSTILE_MOBS = [
 
 const TICK_MS = 250;
 
-function createLiveAgent(bot, options = {}) {
+function createLiveAgent(botOrGetter, options = {}) {
+  // Accept either a bot instance or a getter. The bridge is created before
+  // mineflayer connects, so a by-value reference would be permanently null.
+  const getBot = typeof botOrGetter === 'function' ? botOrGetter : () => botOrGetter;
+  let bot = null;
   const log = options.log || (() => {});
   const maxEvents = options.maxEvents || 200;
 
@@ -75,6 +79,7 @@ function createLiveAgent(bot, options = {}) {
 
   // ─── helpers ────────────────────────────────────────────────────────
   function nearestHostile(radius) {
+    bot = getBot();
     if (!bot.entity) return null;
     return bot.nearestEntity((e) => {
       if (!e || !e.isValid) return false;
@@ -86,12 +91,14 @@ function createLiveAgent(bot, options = {}) {
   }
 
   function hasFood() {
+    bot = getBot();
     return bot.inventory.items().some((it) =>
       ['cooked_beef', 'bread', 'cooked_porkchop', 'cooked_chicken',
         'golden_apple', 'apple', 'carrot', 'baked_potato'].includes(it.name));
   }
 
   function hasSword() {
+    bot = getBot();
     return bot.inventory.items().some((it) => it.name.includes('sword'));
   }
 
@@ -121,6 +128,7 @@ function createLiveAgent(bot, options = {}) {
   }
 
   function fleeIfLow() {
+    bot = getBot();
     if (bot.health > state.reflexes.fleeHealth) return false;
     const p = playerEntity();
     if (!p) return false;
@@ -136,6 +144,7 @@ function createLiveAgent(bot, options = {}) {
   }
 
   function defendIfNeeded() {
+    bot = getBot();
     if (!state.reflexes.autoDefend) return false;
     if (bot.health <= state.reflexes.fleeHealth) return false;
     if (!hasSword()) return false;
@@ -158,6 +167,7 @@ function createLiveAgent(bot, options = {}) {
 
   // ─── intent ─────────────────────────────────────────────────────────
   function applyIntent() {
+    bot = getBot();
     if (!state.intent) return;
     const i = state.intent;
 
@@ -199,6 +209,7 @@ function createLiveAgent(bot, options = {}) {
 
   // ─── tick ───────────────────────────────────────────────────────────
   async function tick() {
+    bot = getBot();  // re-resolve every tick; the bot appears after connect
     if (!bot || !bot.entity || bot.health <= 0) return;
 
     // Death / damage detection

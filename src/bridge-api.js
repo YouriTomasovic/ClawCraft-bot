@@ -17,7 +17,10 @@ function createBridgeAPI({ config, botCore, jobQueue, actions }) {
 
   // Continuous behaviour loop. Runs alongside the job queue: intent and
   // reflexes are not queued, so the bot can walk and fight at the same time.
-  const live = createLiveAgent(botCore.bot, {
+  // Resolve the bot lazily: createBridgeAPI() runs before mineflayer connects,
+  // so botCore.bot is null here. Passing the object by value would freeze a
+  // null reference and every tick would bail at its guard.
+  const live = createLiveAgent(() => botCore.bot, {
     log: (m) => console.log(m),
   });
 
