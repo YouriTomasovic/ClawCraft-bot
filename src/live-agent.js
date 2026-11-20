@@ -219,8 +219,22 @@ function createLiveAgent(bot, options = {}) {
 
   function start() {
     if (_tickHandle) return;
+    let _n = 0;
     _tickHandle = setInterval(() => {
-      tick().catch((e) => log(`[Live] tick error: ${e.message}`));
+      tick().catch((e) => {
+        log(`[Live] tick error: ${e.message}`);
+        pushEvent('tick_error', { error: e.message });
+      });
+      // Every 20 ticks (5s) record the state the loop is actually seeing.
+      if (++_n % 20 === 0 && bot && bot.entity) {
+        pushEvent('_heartbeat', {
+          food: bot.food,
+          typeofFood: typeof bot.food,
+          health: Math.round(bot.health * 10) / 10,
+          lastSkip: _lastSkip,
+          autoEat: state.reflexes.autoEat,
+        });
+      }
     }, TICK_MS);
     pushEvent('loop_start', { tickMs: TICK_MS });
     log('[Live] behaviour loop started');
