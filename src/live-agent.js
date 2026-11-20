@@ -56,6 +56,8 @@ function createLiveAgent(botOrGetter, options = {}) {
   let _lastHealth = 20;
   let _playerName = null;
   let _lastSkip = '';
+  let _eating = false;
+  let _equipping = false;
 
   // Record why a reflex declined to act. Only logs on change, so a 250ms
   // loop does not spam the console.
@@ -120,8 +122,10 @@ function createLiveAgent(botOrGetter, options = {}) {
 
   async function ensureWeapon() {
     if (holdingWeapon()) return true;
+    if (_equipping || _eating) return false;   // never swap mid-bite or mid-swap
     const weapon = findWeapon();
     if (!weapon) return false;
+    _equipping = true;
     try {
       await bot.equip(weapon, 'hand');
       pushEvent('equip', { item: weapon.name });
@@ -130,6 +134,8 @@ function createLiveAgent(botOrGetter, options = {}) {
     } catch (e) {
       log(`[Live] equip failed: ${e.message}`);
       return false;
+    } finally {
+      _equipping = false;
     }
   }
 
@@ -141,12 +147,18 @@ function createLiveAgent(botOrGetter, options = {}) {
   // ─── reflexes ───────────────────────────────────────────────────────
   async function eatIfNeeded() {
     if (!state.reflexes.autoEat) { _skip('autoEat off'); return; }
+    // Re-entrancy guard. consume() takes ~1.6s but tick() runs every 250ms,
+    // so without this the loop calls consume() again mid-bite and mineflayer
+    // cancels the first with "Consuming cancelled due to calling
+    // bot.consume() again".
+    if (_eating) { _skip('already eating'); return; }
     if (bot.food > 17) { _skip(`food ${bot.food} > 17`); return; }
     if (Date.now() - state.lastEatAt < 3000) { _skip('cooldown'); return; }
     const food = bot.inventory.items().find((it) =>
       ['cooked_beef', 'bread', 'cooked_porkchop', 'cooked_chicken',
         'golden_apple', 'apple', 'baked_potato'].includes(it.name));
     if (!food) { _skip('no food item'); return; }
+    _eating = true;
     try {
       await bot.equip(food, 'hand');
       await bot.consume();
@@ -155,6 +167,9 @@ function createLiveAgent(botOrGetter, options = {}) {
       log(`[Live] ate ${food.name}`);
     } catch (e) {
       log(`[Live] eat failed: ${e.message}`);
+      pushEvent('eat_failed', { item: food.name, error: e.message });
+    } finally {
+      _eating = false;
     }
   }
 
