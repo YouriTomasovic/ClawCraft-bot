@@ -7,6 +7,7 @@
 const path = require('path');
 const express = require('express');
 const { createLiveAgent } = require('./live-agent');
+const { goals } = require('mineflayer-pathfinder');
 
 /**
  * Create and launch bridge API
@@ -258,6 +259,39 @@ function createBridgeAPI({ config, botCore, jobQueue, actions }) {
     setTimeout(() => {
       res.json({ ok: true, data: { mode, current: b.game?.gameMode } });
     }, 600);
+  }, true);
+
+  // ─── Item pickup ───────────────────────────────────────────────────
+  // Drops spread after death; walking to one spot misses most of them.
+  // Sweep: visit every dropped item within radius, nearest first.
+  reg('POST', '/actions/sweep-drops', 'world', '{ radius? }', (req, res) => {
+    const b = botCore.bot;
+    if (!b || !b.entity) return res.status(503).json({ ok: false, error: 'Bot not connected' });
+    const radius = Math.min(parsePositiveInt(req.body.radius) || 16, 64);
+
+    const items = Object.values(b.entities)
+      .filter((e) => e && e.isValid && (e.name === 'item' || e.type === 'object'))
+      .filter((e) => e.position.distanceTo(b.entity.position) <= radius)
+      .sort((a, c) => a.position.distanceTo(b.entity.position) - c.position.distanceTo(b.entity.position));
+
+    if (!items.length) return res.json({ ok: true, data: { swept: 0, note: 'no dropped items in range' } });
+
+    let i = 0;
+    const step = () => {
+      if (i >= items.length) {
+        res.json({ ok: true, data: { swept: items.length, at: i } });
+        return;
+      }
+      const e = items[i++];
+      if (!e.isValid) return step();
+      const p = e.position;
+      try {
+        b.pathfinder.setGoal(new goals.GoalNear(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z), 1));
+      } catch (_) { return step(); }
+      // give the pathfinder a moment, then move on so we do not stall
+      setTimeout(step, 1200);
+    };
+    step();
   }, true);
 
   // ─── Live agent: persistent intent + reflexes + events ──────────────
